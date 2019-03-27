@@ -1,0 +1,11 @@
+[package]
+name = "set-ip-addr"
+version = "0.1.0"
+authors = ["ZhangYi <zhangyi@goldensecure.com>"]
+edition = "2018"
+
+[dependencies]
+rtnetlink = "0.1"
+netlink-packet = "0.1"
+futures = "0.1"
+tokio-core = "0.1"
