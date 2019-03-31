@@ -9,7 +9,8 @@ use tokio_core::reactor::Core;
 
 use rtnetlink::new_connection;
 use rtnetlink::packet::{AddressNla, LinkNla};
-use rtnetlink::Handle;
+
+pub use rtnetlink::Handle;
 
 #[derive(Debug)]
 pub struct IpSettingError {
