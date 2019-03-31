@@ -1,5 +1,5 @@
 [package]
-name = "set-ip-addr"
+name = "ip-addr-op"
 version = "0.1.0"
 authors = ["ZhangYi <zhangyi@goldensecure.com>"]
 edition = "2018"

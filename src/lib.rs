@@ -1,3 +1,5 @@
+use std::error::Error;
+use std::fmt;
 use std::net::{IpAddr, Ipv4Addr};
 use std::thread::spawn;
 
@@ -8,14 +10,77 @@ use tokio_core::reactor::Core;
 use rtnetlink::new_connection;
 use rtnetlink::packet::{AddressNla, LinkNla};
 
-pub fn make_ip_addr_setter() -> impl Fn(String, Ipv4Addr, Ipv4Addr, u8) -> Result<(), String> {
+#[derive(Debug)]
+pub struct IpSettingError {
+    dev: String,
+}
+
+impl fmt::Display for IpSettingError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!(f, "set ip address failed on dev {}", self.dev)
+    }
+}
+
+impl Error for IpSettingError {
+    fn description(&self) -> &str {
+        "set ip address failed"
+    }
+}
+
+pub fn make_ip_addr_operaters() -> (
+    impl Fn(String) -> Result<Vec<Ipv4Addr>, Box<dyn Error>>,
+    impl Fn(String, Ipv4Addr, Ipv4Addr, u8) -> Result<(), IpSettingError>,
+) {
     let (connection, handle) = new_connection().unwrap();
+    let handle1 = handle.clone();
 
     spawn(move || Core::new().unwrap().run(connection));
 
-    move |ifname, reserved_addr, new_addr, prefix_len| {
+    let getter = move |ifname| {
         // get all address messages
-        let addrs = handle.address().get().execute().collect().wait().unwrap();
+        let addrs = handle1
+            .address()
+            .get()
+            .execute()
+            .collect()
+            .wait()
+            .expect("get ip address failed");
+
+        // get address messages which's label equal to ifname
+        let addrs_iter = addrs.into_iter().filter(|a| {
+            a.nlas.iter().fold(false, |acc, nla| {
+                acc || match nla {
+                    AddressNla::Label(s) => *s == ifname,
+                    _ => false,
+                }
+            })
+        });
+
+        let mut addrs = vec![];
+
+        for addr_msg in addrs_iter {
+            for nla in addr_msg.nlas {
+                match nla {
+                    AddressNla::Address(addr) => {
+                        addrs.push(Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]))
+                    }
+                    _ => (),
+                }
+            }
+        }
+
+        Ok(addrs)
+    };
+
+    let setter = move |ifname, reserved_addr: Ipv4Addr, new_addr, prefix_len| {
+        // get all address messages
+        let addrs = handle
+            .address()
+            .get()
+            .execute()
+            .collect()
+            .wait()
+            .expect("get ip address failed");
 
         // get address messages which's label equal to ifname
         let addrs_iter = addrs.into_iter().filter(|a| {
@@ -44,7 +109,7 @@ pub fn make_ip_addr_setter() -> impl Fn(String, Ipv4Addr, Ipv4Addr, u8) -> Resul
                             )
                             .execute()
                             .wait()
-                            .unwrap();
+                            .expect("del ip address failed");
                     }
                 }
             }
@@ -58,7 +123,7 @@ pub fn make_ip_addr_setter() -> impl Fn(String, Ipv4Addr, Ipv4Addr, u8) -> Resul
                     .add(i, IpAddr::V4(new_addr), prefix_len)
                     .execute()
                     .wait()
-                    .unwrap();
+                    .expect("add ip address failed");
                 Ok(())
             }
             // the ifname is not exist or have no ip address
@@ -68,21 +133,21 @@ pub fn make_ip_addr_setter() -> impl Fn(String, Ipv4Addr, Ipv4Addr, u8) -> Resul
                     for nla in link.nlas() {
                         if let LinkNla::IfName(s) = nla {
                             if *s == ifname {
-                                // DEBUG
-                                // println!("ifname: {} index: {}", s, link.header().index());
                                 handle
                                     .address()
                                     .add(link.header().index(), IpAddr::V4(new_addr), prefix_len)
                                     .execute()
                                     .wait()
-                                    .unwrap();
+                                    .expect("add ip address failed");
                                 return Ok(());
                             }
                         }
                     }
                 }
-                Err(String::from(format!("not find the ifname: {}", ifname)))
+                Err(IpSettingError { dev: ifname })
             }
         }
-    }
+    };
+
+    (getter, setter)
 }
