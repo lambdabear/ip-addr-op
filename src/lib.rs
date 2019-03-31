@@ -28,7 +28,7 @@ impl Error for IpSettingError {
 }
 
 pub fn make_ip_addr_operaters() -> (
-    impl Fn(String) -> Result<Vec<Ipv4Addr>, Box<dyn Error>>,
+    impl Fn(String) -> Result<Vec<(Ipv4Addr, u8)>, Box<dyn Error>>,
     impl Fn(String, Ipv4Addr, Ipv4Addr, u8) -> Result<(), IpSettingError>,
 ) {
     let (connection, handle) = new_connection().unwrap();
@@ -61,9 +61,10 @@ pub fn make_ip_addr_operaters() -> (
         for addr_msg in addrs_iter {
             for nla in addr_msg.nlas {
                 match nla {
-                    AddressNla::Address(addr) => {
-                        addrs.push(Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]))
-                    }
+                    AddressNla::Address(addr) => addrs.push((
+                        Ipv4Addr::new(addr[0], addr[1], addr[2], addr[3]),
+                        addr_msg.header.prefix_len,
+                    )),
                     _ => (),
                 }
             }
