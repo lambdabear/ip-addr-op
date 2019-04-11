@@ -10,7 +10,7 @@ fn main() {
     let new_addr = args[3].parse::<Ipv4Addr>().unwrap();
     let prefix_len = args[4].parse::<u8>().unwrap();
 
-    let handle = make_handle();
+    let handle = make_handle().unwrap();
 
     match get_ip_addrs(handle.clone(), ifname.clone()) {
         Ok(addrs) => {
